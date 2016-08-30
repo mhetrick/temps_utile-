@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 // Copyright (c) 2016 Patrick Dowling
 //
 // Author: Patrick Dowling (pld@gurkenkiste.com)
@@ -34,6 +36,7 @@
 
 TU::App available_apps[] = {
   DECLARE_APP('C','L', "6xclocks", CLOCKS, CLOCKS_isr),
+  DECLARE_APP('C','S', "Clock Seq", CLOCKSEQ, CLOCKSEQ_isr),
 };
 
 static constexpr int NUM_AVAILABLE_APPS = ARRAY_SIZE(available_apps);
