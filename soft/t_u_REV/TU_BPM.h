@@ -3,15 +3,18 @@
 
  /*
  *
- *  BPM (1-255), quarter notes in ticks. 1 tick = 60us : 
- *  float bpm_exact = 1000000/(float)bpm; 
+ *  BPM (1-255), quarter notes in ticks. 1 tick = 60us :
+ *  float bpm_exact = 1000000/(float)bpm;
  *  uint32_t bpm_tick = (uint32_t)(bpm_exact = + 0.5f);
  *
 */
 
-const uint32_t BPM_microseconds_4th[ ] = { 
+const uint8_t BPM_MIN = 1;      // changes need changes in TU_BPM.h
+const uint8_t BPM_MAX = 255;    // ditto
 
-	1000000, // 1BPM 
+const uint32_t BPM_microseconds_4th[ ] = {
+
+	1000000, // 1BPM
 	500000,
 	333333,
 	250000,
