@@ -910,7 +910,7 @@ public:
       CONSTRAIN(_n, 0, RND_MAX);
     }
 
-    int16_t _rand_new = random(RND_MAX);
+    const int16_t _rand_new = random(RND_MAX);
     return _rand_new > _n ? ON : OFF; // DAC needs special care ...
   }
 
