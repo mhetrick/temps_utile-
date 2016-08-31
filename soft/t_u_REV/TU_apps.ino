@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 // Copyright (c) 2016 Patrick Dowling
 //
 // Author: Patrick Dowling (pld@gurkenkiste.com)

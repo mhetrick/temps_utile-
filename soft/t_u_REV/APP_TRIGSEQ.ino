@@ -40,44 +40,23 @@
 #include "extern/dspinst.h"
 
 namespace menu = TU::menu;
-
-const uint8_t MULT_MAX = 14;    // max multiplier
+/*
 const uint8_t PULSEW_MAX = 255; // max pulse width [ms]
-const uint8_t BPM_MIN = 1;      // changes need changes in TU_BPM.h
-const uint8_t BPM_MAX = 255;    // ditto
 const uint16_t TOGGLE_THRESHOLD = 500; // ADC threshold for 0/1 parameters (500 = ~1.2V)
 
 const uint32_t SCALE_PULSEWIDTH = 58982; // 0.9 for signed_multiply_32x16b
 const uint32_t TICKS_TO_MS = 43691; // 0.6667f : fraction, if TU_CORE_TIMER_RATE = 60 us : 65536U * ((1000 / TU_CORE_TIMER_RATE) - 16)
 const uint32_t TICK_JITTER = 0xFFFFFFF;  // 1/16 : threshold/double triggers reject -> ext_frequency_in_ticks_
 const uint32_t TICK_SCALE  = 0xC0000000; // 0.75 for signed_multiply_32x32
-const uint8_t MULT_BY_ONE = 7; // default multiplication
-
-extern const uint32_t BPM_microseconds_4th[];
 
 uint32_t ticks_src1 = 0; // main clock frequency (top)
 uint32_t ticks_src2 = 0; // sec. clock frequency (bottom)
+*/
+extern const uint32_t BPM_microseconds_4th[];
+extern const uint64_t multipliers_[];
 
-const uint64_t multipliers_[] = {
-
-  0x100000000,// /8
-  0xE0000000, // /7
-  0xC0000000, // /6
-  0xA0000000, // /5
-  0x80000000, // /4
-  0x60000000, // /3
-  0x40000000, // /2
-  0x20000000, // x1
-  0x10000000, // x2
-  0xAAAAAAB,  // x3
-  0x8000000,  // x4
-  0x6666667,  // x5
-  0x5555556,  // x6
-  0x4924926,  // x7
-  0x4000000   // x8
-}; // = multiplier / 8.0f * 2^32
-
-enum ChannelSetting {
+/*
+enum ClockSeqChannelSetting {
   // shared
   CHANNEL_SETTING_MODE,
   CHANNEL_SETTING_CLOCK,
@@ -96,7 +75,7 @@ enum ChannelSetting {
   CHANNEL_SETTING_LAST
 };
 
-enum ChannelTriggerSource {
+enum ClockSeqChannelTriggerSource {
   CHANNEL_TRIGGER_TR1,
   CHANNEL_TRIGGER_TR2,
   CHANNEL_TRIGGER_NONE,
@@ -106,7 +85,7 @@ enum ChannelTriggerSource {
   CHANNEL_TRIGGER_FREEZE_LOW = CHANNEL_TRIGGER_LAST
 };
 
-enum ChannelCV_Mapping {
+enum ClockSeqChannelCV_Mapping {
   CHANNEL_CV_MAPPING_CV1,
   CHANNEL_CV_MAPPING_CV2,
   CHANNEL_CV_MAPPING_CV3,
@@ -114,25 +93,21 @@ enum ChannelCV_Mapping {
   CHANNEL_CV_MAPPING_LAST
 };
 
-enum CLOCKSTATES {
+enum ClockSeqCLOCKSTATES {
   OFF,
   ON = 4095
 };
 
-enum MENUPAGES {
+enum ClockSeqMENUPAGES {
   PARAMETERS,
   CV_SOURCES,
   TEMPO
 };
-
-uint64_t ext_frequency[CHANNEL_TRIGGER_LAST];
+*/
+//uint64_t ext_frequency[CHANNEL_TRIGGER_LAST];
 
 class ClockSeq_channel : public settings::SettingsBase<Clock_channel, CHANNEL_SETTING_LAST> {
 public:
-
-  uint8_t get_mode() const {
-    return values_[CHANNEL_SETTING_MODE];
-  }
 
   uint8_t get_clock_source() const {
     return values_[CHANNEL_SETTING_CLOCK];
@@ -238,7 +213,6 @@ public:
     reset_ = false;
     reset_counter_ = false;
     reset_me_ = false;
-    logic_ = false;
     menu_page_ = PARAMETERS;
 
     prev_multiplier_ = get_multiplier();
@@ -250,9 +224,6 @@ public:
     pulse_width_in_ticks_ = get_pulsewidth() << 10;
 
     _ZERO = TU::calibration_data.dac.calibrated_Zero[0x0][0x0];
-
-    display_sequence_ = get_sequence();
-    display_mask_ = get_mask(display_sequence_);
 
     clock_display_.Init();
     update_enabled_settings(0);
@@ -269,7 +240,7 @@ public:
      // increment channel ticks ..
      subticks_++;
 
-     int8_t _clock_source, _reset_source, _mode;
+     int8_t _clock_source, _reset_source;
      int8_t _multiplier;
      bool _none, _triggered, _tock, _sync;
      uint16_t _output = gpio_state_;
@@ -292,8 +263,7 @@ public:
         _multiplier += (TU::ADC::value(static_cast<ADC_CHANNEL>(get_mult_cv_source() - 1)) + 127) >> 8;
         CONSTRAIN(_multiplier, 0, MULT_MAX);
      }
-     // 3. channel mode?
-     _mode = get_mode();
+
      // clocked ?
      _none = CHANNEL_TRIGGER_NONE == _clock_source;
      _triggered = !_none && (triggers & DIGITAL_INPUT_MASK(_clock_source - CHANNEL_TRIGGER_TR1));
@@ -564,17 +534,6 @@ public:
     num_enabled_settings_ = settings - enabled_settings_;
   }
 
-
-  uint16_t update_sequence(int32_t mask_rotate_, uint8_t sequence_, uint16_t mask_) {
-
-    const int sequence_num = sequence_;
-    uint16_t mask = mask_;
-
-    if (mask_rotate_)
-      mask = TU::PatternEditor<Clock_channel>::RotateMask(mask, get_sequence_length(sequence_num), mask_rotate_);
-    return mask;
-  }
-
   void RenderScreensaver(weegfx::coord_t start_x, CLOCK_CHANNEL clockSeqChan) const;
 
 private:
@@ -607,29 +566,13 @@ private:
 
 };
 
-const char* const channel_trigger_sources[CHANNEL_TRIGGER_LAST] = {
-  "TR1", "TR2", "none", "INT"
-};
-
-const char* const reset_trigger_sources[CHANNEL_TRIGGER_LAST+1] = {
-  "RST1", "RST2", "none", "=HI2", "=LO2"
-};
-
-const char* const multipliers[] = {
-  "/8", "/7", "/6", "/5", "/4", "/3", "/2", "-", "x2", "x3", "x4", "x5", "x6", "x7", "x8"
-};
-
-const char* const cv_sources[5] = {
-  "--", "CV1", "CV2", "CV3", "CV4"
-};
-
-SETTINGS_DECLARE(Clock_channel, CHANNEL_SETTING_LAST) {
+SETTINGS_DECLARE(ClockSeq_channel, CHANNEL_SETTING_LAST) {
 
   { 0, 0, MODES - 2, "mode", TU::Strings::mode, settings::STORAGE_TYPE_U4 },
   { 0, 0, MODES - 1, "mode", TU::Strings::mode, settings::STORAGE_TYPE_U4 },
-  { CHANNEL_TRIGGER_TR1, 0, CHANNEL_TRIGGER_LAST, "clock src", channel_trigger_sources, settings::STORAGE_TYPE_U4 },
-  { CHANNEL_TRIGGER_NONE, 0, CHANNEL_TRIGGER_LAST, "reset/mute", reset_trigger_sources, settings::STORAGE_TYPE_U4 },
-  { MULT_BY_ONE, 0, MULT_MAX, "mult/div", multipliers, settings::STORAGE_TYPE_U8 },
+  { CHANNEL_TRIGGER_TR1, 0, CHANNEL_TRIGGER_LAST, "clock src", TU::Strings::channel_trigger_sources, settings::STORAGE_TYPE_U4 },
+  { CHANNEL_TRIGGER_NONE, 0, CHANNEL_TRIGGER_LAST, "reset/mute", TU::Strings::reset_trigger_sources, settings::STORAGE_TYPE_U4 },
+  { MULT_BY_ONE, 0, MULT_MAX, "mult/div", multiplierStrings, settings::STORAGE_TYPE_U8 },
   { 25, 0, PULSEW_MAX, "pulsewidth", TU::Strings::pulsewidth_ms, settings::STORAGE_TYPE_U8 },
   { 100, BPM_MIN, BPM_MAX, "BPM:", NULL, settings::STORAGE_TYPE_U8 },
 
@@ -646,13 +589,13 @@ SETTINGS_DECLARE(Clock_channel, CHANNEL_SETTING_LAST) {
   { TU::Patterns::kMax, TU::Patterns::kMin, TU::Patterns::kMax, "sequence length", NULL, settings::STORAGE_TYPE_U8 }, // seq 3
   { TU::Patterns::kMax, TU::Patterns::kMin, TU::Patterns::kMax, "sequence length", NULL, settings::STORAGE_TYPE_U8 }, // seq 4
   // cv sources
-  { 0, 0, 4, "mult/div    >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "pulsewidth  >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "clock src   >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "sequence #  >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "mask        >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "rnd hist.   >>", cv_sources, settings::STORAGE_TYPE_U4 },
-  { 0, 0, 4, "hist. depth >>", cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "mult/div    >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "pulsewidth  >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "clock src   >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "sequence #  >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "mask        >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "rnd hist.   >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
+  { 0, 0, 4, "hist. depth >>", TU::Strings::cv_sources, settings::STORAGE_TYPE_U4 },
   { 0, 0, 0, "---------------------", NULL, settings::STORAGE_TYPE_U4 }, // DUMMY
   { 0, 0, 0, "  ", NULL, settings::STORAGE_TYPE_U4 }, // DUMMY empty
   { 0, 0, 0, "  ", NULL, settings::STORAGE_TYPE_U4 }  // screensaver
@@ -664,7 +607,6 @@ public:
   void Init() {
     selected_channel = 0;
     cursor.Init(CHANNEL_SETTING_MODE, CHANNEL_SETTING_LAST - 1);
-    pattern_editor.Init();
     resetSequence();
     sequenceLength = 5;
   }
@@ -680,15 +622,14 @@ public:
   int selected_channel;
   menu::ScreenCursor<menu::kScreenLines> cursor;
   menu::ScreenCursor<menu::kScreenLines> cursor_state;
-  TU::PatternEditor<Clock_channel> pattern_editor;
 
   uint8_t sequenceLength;
-  uint8_t sequencePosition;
+  uint8_t sequencePos;
 
   void advanceSequence()
   {
-    sequencePosition++;
-    if (sequencePosition > sequenceLength)
+    sequencePos++;
+    if (sequencePos > sequenceLength)
     {
       resetSequence();
     }
@@ -696,10 +637,10 @@ public:
 
   inline void resetSequence()
   {
-    sequencePosition = 0;
+    sequencePos = 0;
   }
 
-  inline uint8_t sequencePosition() const {return sequencePosition;}
+  inline uint8_t sequencePosition() const {return sequencePos;}
 };
 
 ClockSeqState clockSeqState;
@@ -716,7 +657,6 @@ void CLOCKSEQ_init() {
   clockSeqState.Init();
   for (size_t i = 0; i < NUM_CHANNELS; ++i) {
     clockSeqChan[i].Init(static_cast<ChannelTriggerSource>(CHANNEL_TRIGGER_TR1));
-    clockSeqChan[i].update_sequence(0, clockSeqChan[i].get_sequence(), clockSeqChan[i].get_mask(clockSeqChan[i].get_sequence()));
   }
   clockSeqState.cursor.AdjustEnd(clockSeqChan[0].num_enabled_settings() - 1);
 }
@@ -747,13 +687,12 @@ void CLOCKSEQ_handleAppEvent(TU::AppEvent event) {
   switch (event) {
     case TU::APP_EVENT_RESUME:
         clockSeqState.cursor.set_editing(false);
-        clockSeqState.pattern_editor.Close();
     break;
     case TU::APP_EVENT_SUSPEND:
     case TU::APP_EVENT_SCREENSAVER_ON:
     case TU::APP_EVENT_SCREENSAVER_OFF:
     {
-      Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+      ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
         if (selected.get_page() > PARAMETERS) {
           selected.set_page(PARAMETERS);
           selected.update_enabled_settings(clockSeqState.selected_channel);
@@ -815,11 +754,6 @@ void CLOCKSEQ_handleButtonEvent(const UI::Event &event) {
      }
   }
 
-  if (clockSeqState.pattern_editor.active()) {
-    clockSeqState.pattern_editor.HandleButtonEvent(event);
-    return;
-  }
-
   if (UI::EVENT_BUTTON_PRESS == event.type) {
     switch (event.control) {
       case TU::CONTROL_BUTTON_UP:
@@ -840,18 +774,13 @@ void CLOCKSEQ_handleButtonEvent(const UI::Event &event) {
 
 void CLOCKSEQ_handleEncoderEvent(const UI::Event &event) {
 
-  if (clockSeqState.pattern_editor.active()) {
-    clockSeqState.pattern_editor.HandleEncoderEvent(event);
-    return;
-  }
-
   if (TU::CONTROL_ENCODER_L == event.control) {
 
     int selected_channel = clockSeqState.selected_channel + event.value;
     CONSTRAIN(selected_channel, 0, NUM_CHANNELS-1);
     clockSeqState.selected_channel = selected_channel;
 
-    Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+    ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
     if (selected.get_page() == TEMPO || selected.get_page() == CV_SOURCES)
       selected.set_page(PARAMETERS);
@@ -862,7 +791,7 @@ void CLOCKSEQ_handleEncoderEvent(const UI::Event &event) {
 
   } else if (TU::CONTROL_ENCODER_R == event.control) {
 
-       Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+       ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
        if (selected.get_page() == TEMPO) {
 
@@ -903,7 +832,7 @@ void CLOCKSEQ_handleEncoderEvent(const UI::Event &event) {
 
 void CLOCKSEQ_upButton() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
   uint8_t _menu_page = selected.get_page();
 
@@ -926,7 +855,7 @@ void CLOCKSEQ_upButton() {
 
 void CLOCKSEQ_downButton() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
   uint8_t _menu_page = selected.get_page();
 
@@ -954,7 +883,7 @@ void CLOCKSEQ_downButton() {
 
 void CLOCKSEQ_rightButton() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
   if (selected.get_page() == TEMPO) {
     selected.set_page(PARAMETERS);
@@ -970,12 +899,6 @@ void CLOCKSEQ_rightButton() {
     case CHANNEL_SETTING_MASK2:
     case CHANNEL_SETTING_MASK3:
     case CHANNEL_SETTING_MASK4:
-    {
-      int pattern = selected.get_sequence();
-      if (TU::Patterns::PATTERN_NONE != pattern) {
-        clockSeqState.pattern_editor.Edit(&selected, pattern);
-      }
-    }
     break;
     case CHANNEL_SETTING_DUMMY:
     case CHANNEL_SETTING_DUMMY_EMPTY:
@@ -989,7 +912,7 @@ void CLOCKSEQ_rightButton() {
 
 void CLOCKSEQ_leftButton() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
   if (selected.get_page() == TEMPO) {
     selected.set_page(PARAMETERS);
@@ -1008,7 +931,7 @@ void CLOCKSEQ_leftButtonLong() {
   for (int i = 0; i < NUM_CHANNELS; ++i)
         clockSeqChan[i].InitDefaults();
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
   selected.set_page(PARAMETERS);
   selected.update_enabled_settings(clockSeqState.selected_channel);
   clockSeqState.cursor.set_editing(false);
@@ -1017,7 +940,7 @@ void CLOCKSEQ_leftButtonLong() {
 
 void CLOCKSEQ_upButtonLong() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
   // set all channels to internal ?
   if (selected.get_page() == TEMPO) {
     for (int i = 0; i < NUM_CHANNELS; ++i)
@@ -1040,7 +963,7 @@ void CLOCKSEQ_upButtonLong() {
 
 void CLOCKSEQ_downButtonLong() {
 
-  Clock_channel &selected = clockSeqChan[clockSeqState.selected_channel];
+  ClockSeq_channel &selected = clockSeqChan[clockSeqState.selected_channel];
 
   if (selected.get_page() == CV_SOURCES)
     selected.clear_CV_mapping();
@@ -1070,7 +993,7 @@ void CLOCKSEQ_menu() {
 
   for (int i = 0, x = 0; i < NUM_CHANNELS; ++i, x += 21) {
 
-    const Clock_channel &channel = clockSeqChan[i];
+    const ClockSeq_channel &channel = clockSeqChan[i];
     menu::SixTitleBar::SetColumn(i);
     graphics.print((char)('1' + i));
     graphics.movePrintPos(2, 0);
@@ -1080,7 +1003,7 @@ void CLOCKSEQ_menu() {
     menu::SixTitleBar::DrawGateIndicator(i, internal_);
   }
 
-  const Clock_channel &channel = clockSeqChan[clockSeqState.selected_channel];
+  const ClockSeq_channel &channel = clockSeqChan[clockSeqState.selected_channel];
   if (channel.get_page() != TEMPO)
     menu::SixTitleBar::Selected(clockSeqState.selected_channel);
 
@@ -1100,7 +1023,6 @@ void CLOCKSEQ_menu() {
       case CHANNEL_SETTING_MASK2:
       case CHANNEL_SETTING_MASK3:
       case CHANNEL_SETTING_MASK4:
-        menu::DrawMask<false, 16, 8, 1>(menu::kDisplayWidth, list_item.y, channel.get_display_mask(), channel.get_sequence_length(channel.get_display_sequence()));
         list_item.DrawNoValue<false>(value, attr);
         break;
       case CHANNEL_SETTING_DUMMY:
@@ -1120,14 +1042,11 @@ void CLOCKSEQ_menu() {
         list_item.DrawDefault(value, attr);
     }
   }
-
-  if (clockSeqState.pattern_editor.active())
-    clockSeqState.pattern_editor.Draw();
 }
 
 void ClockSeq_channel::RenderScreensaver(weegfx::coord_t start_x, CLOCK_CHANNEL clockSeqChan) const {
 
-  uint16_t _square, _frame, _mode = get_mode4();
+  uint16_t _square, _frame;
 
   _square = TU::OUTPUTS::state(clockSeqChan);
   _frame  = TU::OUTPUTS::value(clockSeqChan);
